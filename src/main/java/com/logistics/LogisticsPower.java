@@ -4,6 +4,9 @@ import com.logistics.core.bootstrap.DomainBootstrap;
 import com.logistics.core.lib.resource.ResourceId;
 import com.logistics.power.block.CreativeSinkBlock;
 import com.logistics.power.block.entity.CreativeSinkBlockEntity;
+import com.logistics.power.cable.CableBlock;
+import com.logistics.power.cable.CableBlockEntity;
+import com.logistics.power.cable.CableNetworkManager;
 import com.logistics.power.engine.block.CreativeEngineBlock;
 import com.logistics.power.engine.block.RedstoneEngineBlock;
 import com.logistics.power.engine.block.StirlingEngineBlock;
@@ -11,6 +14,8 @@ import com.logistics.power.engine.block.entity.CreativeEngineBlockEntity;
 import com.logistics.power.engine.block.entity.RedstoneEngineBlockEntity;
 import com.logistics.power.engine.block.entity.StirlingEngineBlockEntity;
 import com.logistics.power.engine.ui.StirlingEngineScreenHandler;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
@@ -50,6 +55,9 @@ public final class LogisticsPower extends LogisticsMod implements DomainBootstra
         SCREEN.register();
 
         addCreativeTabEntries();
+
+        ServerTickEvents.END_SERVER_TICK.register(CableNetworkManager::tickAll);
+        ServerWorldEvents.UNLOAD.register((server, level) -> CableNetworkManager.clearLevel(level));
     }
 
     public static final class BLOCK {
@@ -59,6 +67,7 @@ public final class LogisticsPower extends LogisticsMod implements DomainBootstra
         public static Block STIRLING_ENGINE;
         public static Block CREATIVE_ENGINE;
         public static Block CREATIVE_SINK;
+        public static Block CABLE;
 
         static void register() {
             REDSTONE_ENGINE = INSTANCE.registerBlockWithItem("redstone_engine",
@@ -69,6 +78,8 @@ public final class LogisticsPower extends LogisticsMod implements DomainBootstra
                 props -> new CreativeEngineBlock(props.strength(5.0f).sound(SoundType.STONE).noOcclusion()));
             CREATIVE_SINK = INSTANCE.registerBlockWithItem("creative_sink",
                 props -> new CreativeSinkBlock(props.strength(5.0f).sound(SoundType.STONE)));
+            CABLE = INSTANCE.registerBlockWithItem("cable",
+                props -> new CableBlock(props.strength(1.5f).sound(SoundType.COPPER).noOcclusion()));
         }
     }
 
@@ -79,6 +90,7 @@ public final class LogisticsPower extends LogisticsMod implements DomainBootstra
         public static BlockEntityType<StirlingEngineBlockEntity> STIRLING_ENGINE_BLOCK_ENTITY;
         public static BlockEntityType<CreativeEngineBlockEntity> CREATIVE_ENGINE_BLOCK_ENTITY;
         public static BlockEntityType<CreativeSinkBlockEntity> CREATIVE_SINK_BLOCK_ENTITY;
+        public static BlockEntityType<CableBlockEntity> CABLE_BLOCK_ENTITY;
 
         static void register() {
             REDSTONE_ENGINE_BLOCK_ENTITY =
@@ -89,6 +101,8 @@ public final class LogisticsPower extends LogisticsMod implements DomainBootstra
                 INSTANCE.registerBlockEntity("creative_engine", CreativeEngineBlockEntity::new, BLOCK.CREATIVE_ENGINE);
             CREATIVE_SINK_BLOCK_ENTITY =
                 INSTANCE.registerBlockEntity("creative_sink", CreativeSinkBlockEntity::new, BLOCK.CREATIVE_SINK);
+            CABLE_BLOCK_ENTITY =
+                INSTANCE.registerBlockEntity("cable", CableBlockEntity::new, BLOCK.CABLE);
         }
     }
 
@@ -110,7 +124,8 @@ public final class LogisticsPower extends LogisticsMod implements DomainBootstra
                 BLOCK.REDSTONE_ENGINE,
                 BLOCK.STIRLING_ENGINE,
                 BLOCK.CREATIVE_ENGINE,
-                BLOCK.CREATIVE_SINK
+                BLOCK.CREATIVE_SINK,
+                BLOCK.CABLE
         );
     }
 }
