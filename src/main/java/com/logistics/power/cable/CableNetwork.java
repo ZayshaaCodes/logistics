@@ -1,12 +1,15 @@
 package com.logistics.power.cable;
 
 import com.logistics.core.lib.power.AbstractEngineBlockEntity;
+import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
+import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.Level;
-import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import org.jetbrains.annotations.Nullable;
 import team.reborn.energy.api.EnergyStorage;
+import team.reborn.energy.api.EnergyStorageUtil;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -17,17 +20,18 @@ import java.util.Queue;
 import java.util.Set;
 
 /**
- * Represents a connected group of energy cables that share energy as a single pool.
+ * Represents a connected group of energy cables that transfers energy without storage.
  *
  * <p>Each tick, the network:
  * <ol>
- *   <li>Pools all energy from member cables</li>
- *   <li>Distributes energy evenly to all connected devices</li>
- *   <li>Spreads remaining energy evenly back across cables</li>
+ *   <li>Finds source devices that expose extractable energy</li>
+ *   <li>Finds target devices that can accept energy</li>
+ *   <li>Transfers only energy that can be accepted by a target</li>
  * </ol>
  *
- * <p>This ensures all devices connected anywhere on the cable network receive
- * equal power, regardless of their distance from the energy source.
+ * <p>Push-based sources, such as engines, insert into a cable endpoint directly.
+ * That insertion is forwarded to connected targets in the same transaction;
+ * any energy that cannot be delivered is rejected rather than stored.
  */
 public class CableNetwork {
     private static final long MAX_TRANSFER_PER_DEVICE = 640;
@@ -71,40 +75,29 @@ public class CableNetwork {
     }
 
     /**
-     * Distributes energy across the network following the standard push-based convention.
+     * Moves energy across the network without buffering it in cables.
      *
-     * <p>Following TechReborn's reference implementation:
-     * <ol>
-     *   <li>Pool all cable energy into a network total</li>
-     *   <li>Pull energy from adjacent sources (generators) into the pool</li>
-     *   <li>Push energy from the pool to adjacent consumers (machines)</li>
-     *   <li>Spread remaining energy evenly across cables</li>
-     * </ol>
-     *
-     * <p>Uses the Transaction API for safe energy transfers. Each device
-     * receives a fair share limited by the cable transfer rate.
+     * <p>Managed push sources, such as engines, are skipped here because they
+     * actively push into cable endpoints on their own output cadence.
      */
     public void tick(Level level) {
-        // 1. Collect all cable entities and pool their energy
-        List<CableBlockEntity> cables = new ArrayList<>();
-        long networkCapacity = 0;
-        long networkAmount = 0;
+        DeviceConnections connections = collectDeviceConnections(level, null);
+        transferBetween(connections.sources(), connections.targets(), getNetworkTransferLimit());
+    }
 
-        for (BlockPos pos : cablePositions) {
-            if (level.getBlockEntity(pos) instanceof CableBlockEntity cable) {
-                cables.add(cable);
-                networkAmount += cable.getStoredEnergy();
-                networkCapacity += cable.getCapacity();
-                cable.setStoredEnergy(0);
-            }
+    public long insert(
+            Level level, BlockPos entryCablePos, @Nullable Direction sourceSide,
+            long maxAmount, TransactionContext transaction) {
+        if (maxAmount <= 0 || !contains(entryCablePos)) {
+            return 0;
         }
 
-        if (cables.isEmpty()) return;
-        if (networkAmount > networkCapacity) {
-            networkAmount = networkCapacity;
-        }
+        BlockPos sourcePos = sourceSide == null ? null : entryCablePos.relative(sourceSide);
+        DeviceConnections connections = collectDeviceConnections(level, sourcePos);
+        return insertIntoTargets(connections.targets(), Math.min(maxAmount, getNetworkTransferLimit()), transaction);
+    }
 
-        // 2. Find all unique device connections at the network boundary
+    private DeviceConnections collectDeviceConnections(Level level, @Nullable BlockPos excludedPos) {
         List<EnergyStorage> sources = new ArrayList<>();
         List<EnergyStorage> targets = new ArrayList<>();
         Set<BlockPos> seenDevices = new HashSet<>();
@@ -113,6 +106,7 @@ public class CableNetwork {
             for (Direction dir : Direction.values()) {
                 BlockPos neighborPos = cablePos.relative(dir);
                 if (cablePositions.contains(neighborPos)) continue;
+                if (neighborPos.equals(excludedPos)) continue;
                 if (!seenDevices.add(neighborPos)) continue;
 
                 EnergyStorage storage = EnergyStorage.SIDED.find(level, neighborPos, dir.getOpposite());
@@ -128,62 +122,44 @@ public class CableNetwork {
             }
         }
 
-        // 3. Pull energy from sources into the network
-        networkAmount += transferEnergy(sources, networkCapacity - networkAmount, true);
-
-        // 4. Push energy from the network to consumers
-        networkAmount -= transferEnergy(targets, networkAmount, false);
-
-        // 5. Spread remaining energy evenly across cables
-        int cableCount = cables.size();
-        for (CableBlockEntity cable : cables) {
-            long share = networkAmount / cableCount;
-            cable.setStoredEnergy(share);
-            networkAmount -= share;
-            cableCount--;
-        }
+        return new DeviceConnections(sources, targets);
     }
 
-    /**
-     * Transfers energy to/from a list of targets, distributing fairly.
-     * Shuffles targets to avoid bias from iteration order.
-     *
-     * @param targets   adjacent energy storages
-     * @param maxAmount maximum total energy to transfer
-     * @param extract   true to extract from targets, false to insert into targets
-     * @return total amount actually transferred
-     */
-    private long transferEnergy(List<EnergyStorage> targets, long maxAmount, boolean extract) {
-        if (targets.isEmpty() || maxAmount <= 0) return 0;
+    private long getNetworkTransferLimit() {
+        return Math.max(1, cablePositions.size()) * MAX_TRANSFER_PER_DEVICE;
+    }
 
-        // Filter to only targets that support the operation
-        List<EnergyStorage> validTargets = new ArrayList<>();
-        for (EnergyStorage target : targets) {
-            if (extract ? target.supportsExtraction() : target.supportsInsertion()) {
-                validTargets.add(target);
-            }
-        }
-        if (validTargets.isEmpty()) return 0;
+    private long transferBetween(List<EnergyStorage> sources, List<EnergyStorage> targets, long maxAmount) {
+        if (sources.isEmpty() || targets.isEmpty() || maxAmount <= 0) return 0;
 
-        // Shuffle to avoid directional bias
+        List<EnergyStorage> validSources = filterSources(sources);
+        List<EnergyStorage> validTargets = filterTargets(targets);
+        if (validSources.isEmpty() || validTargets.isEmpty()) return 0;
+
+        Collections.shuffle(validSources);
         Collections.shuffle(validTargets);
 
         try (Transaction transaction = Transaction.openOuter()) {
             long totalTransferred = 0;
 
-            for (int i = 0; i < validTargets.size(); i++) {
-                EnergyStorage target = validTargets.get(i);
-                int remainingTargets = validTargets.size() - i;
-                long remaining = maxAmount - totalTransferred;
+            for (int targetIndex = 0; targetIndex < validTargets.size(); targetIndex++) {
+                EnergyStorage target = validTargets.get(targetIndex);
+                int remainingTargets = validTargets.size() - targetIndex;
+                long targetRemaining = Math.min(
+                        (maxAmount - totalTransferred) / remainingTargets,
+                        MAX_TRANSFER_PER_DEVICE);
 
-                // Fair share: divide remaining evenly, capped at cable transfer rate
-                long targetMax = Math.min(remaining / remainingTargets, MAX_TRANSFER_PER_DEVICE);
+                for (EnergyStorage source : validSources) {
+                    if (source == target || targetRemaining <= 0 || totalTransferred >= maxAmount) continue;
 
-                long transferred = extract
-                        ? target.extract(targetMax, transaction)
-                        : target.insert(targetMax, transaction);
-
-                totalTransferred += transferred;
+                    long moved = EnergyStorageUtil.move(
+                            source,
+                            target,
+                            Math.min(targetRemaining, maxAmount - totalTransferred),
+                            transaction);
+                    totalTransferred += moved;
+                    targetRemaining -= moved;
+                }
             }
 
             transaction.commit();
@@ -191,7 +167,62 @@ public class CableNetwork {
         }
     }
 
+    /**
+     * Inserts energy into connected targets, distributing fairly.
+     * Shuffles targets to avoid bias from iteration order.
+     */
+    private long insertIntoTargets(List<EnergyStorage> targets, long maxAmount, TransactionContext transaction) {
+        if (targets.isEmpty() || maxAmount <= 0) return 0;
+
+        if (transaction == null) {
+            try (Transaction outer = Transaction.openOuter()) {
+                long inserted = insertIntoTargets(targets, maxAmount, outer);
+                outer.commit();
+                return inserted;
+            }
+        }
+
+        List<EnergyStorage> validTargets = filterTargets(targets);
+        if (validTargets.isEmpty()) return 0;
+
+        Collections.shuffle(validTargets);
+
+        long totalInserted = 0;
+        for (int i = 0; i < validTargets.size(); i++) {
+            EnergyStorage target = validTargets.get(i);
+            int remainingTargets = validTargets.size() - i;
+            long remaining = maxAmount - totalInserted;
+            long targetMax = Math.min(remaining / remainingTargets, MAX_TRANSFER_PER_DEVICE);
+
+            totalInserted += target.insert(targetMax, transaction);
+        }
+
+        return totalInserted;
+    }
+
+    private List<EnergyStorage> filterSources(List<EnergyStorage> sources) {
+        List<EnergyStorage> validSources = new ArrayList<>();
+        for (EnergyStorage source : sources) {
+            if (source.supportsExtraction()) {
+                validSources.add(source);
+            }
+        }
+        return validSources;
+    }
+
+    private List<EnergyStorage> filterTargets(List<EnergyStorage> targets) {
+        List<EnergyStorage> validTargets = new ArrayList<>();
+        for (EnergyStorage target : targets) {
+            if (target.supportsInsertion()) {
+                validTargets.add(target);
+            }
+        }
+        return validTargets;
+    }
+
     private boolean isManagedPushSource(BlockEntity blockEntity) {
         return blockEntity instanceof AbstractEngineBlockEntity;
     }
+
+    private record DeviceConnections(List<EnergyStorage> sources, List<EnergyStorage> targets) {}
 }

@@ -140,6 +140,7 @@ public class CableBlock extends BaseEntityBlock implements ProbeBehavior.Probeab
         if (state.getValue(WATERLOGGED)) {
             tickView.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(world));
         }
+        invalidateConnections(world, pos);
         return state;
     }
 
@@ -147,11 +148,18 @@ public class CableBlock extends BaseEntityBlock implements ProbeBehavior.Probeab
     protected void neighborChanged(
             BlockState state, Level world, BlockPos pos, Block block,
             @Nullable Orientation orientation, boolean notify) {
-        if (!world.isClientSide() && world.getBlockEntity(pos) instanceof CableBlockEntity cable) {
-            cable.invalidateConnectionCache();
-            CableNetworkManager.get(world).markDirty();
-        }
+        invalidateConnections(world, pos);
         super.neighborChanged(state, world, pos, block, orientation, notify);
+    }
+
+    private void invalidateConnections(LevelReader world, BlockPos pos) {
+        if (!(world instanceof Level level)) return;
+        if (level.getBlockEntity(pos) instanceof CableBlockEntity cable) {
+            cable.invalidateConnectionCache();
+            if (!level.isClientSide()) {
+                CableNetworkManager.get(level).markDirty();
+            }
+        }
     }
 
     @Override
@@ -191,11 +199,6 @@ public class CableBlock extends BaseEntityBlock implements ProbeBehavior.Probeab
      * Cables connect to other cables and any block exposing EnergyStorage.
      */
     public ConnectionType getConnectionType(BlockGetter world, BlockPos pos, Direction direction) {
-        if (world instanceof Level level && level.isClientSide()) {
-            if (level.getBlockEntity(pos) instanceof CableBlockEntity cable) {
-                return cable.getCachedConnectionType(direction);
-            }
-        }
         return getDynamicConnectionType(world, pos, direction);
     }
 

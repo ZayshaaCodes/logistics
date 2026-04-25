@@ -1,8 +1,11 @@
 package com.logistics.power.cable;
 
+import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -49,6 +52,31 @@ public class CableNetworkManager {
         dirty = true;
     }
 
+    public long insert(
+            Level level, BlockPos cablePos, @Nullable Direction sourceSide,
+            long maxAmount, TransactionContext transaction) {
+        if (maxAmount <= 0 || !(level.getBlockEntity(cablePos) instanceof CableBlockEntity)) {
+            return 0;
+        }
+
+        addCable(cablePos);
+        if (dirty) {
+            rebuildNetworks(level);
+            dirty = false;
+        }
+
+        for (CableNetwork network : networks) {
+            if (network.contains(cablePos)) {
+                return network.insert(level, cablePos, sourceSide, maxAmount, transaction);
+            }
+        }
+
+        CableNetwork network = CableNetwork.buildFrom(level, cablePos);
+        networks.add(network);
+        allCables.addAll(network.getCablePositions());
+        return network.insert(level, cablePos, sourceSide, maxAmount, transaction);
+    }
+
     /**
      * Ticks all cable networks in this level.
      * Called once per server tick from the power domain's tick handler.
@@ -77,6 +105,7 @@ public class CableNetworkManager {
             BlockPos start = unvisited.iterator().next();
             CableNetwork network = CableNetwork.buildFrom(level, start);
             networks.add(network);
+            allCables.addAll(network.getCablePositions());
             unvisited.removeAll(network.getCablePositions());
         }
     }

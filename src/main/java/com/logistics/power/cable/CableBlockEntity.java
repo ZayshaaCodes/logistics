@@ -3,35 +3,29 @@ package com.logistics.power.cable;
 import com.logistics.LogisticsPower;
 import com.logistics.core.lib.BaseBlockEntity;
 import com.logistics.core.lib.block.capability.HasEnergyStorage;
-import com.logistics.core.lib.energy.EnergyComponent;
 import com.logistics.core.lib.power.AcceptsLowTierEnergy;
 import com.logistics.core.lib.support.ProbeResult;
+import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.HolderLookup;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 import team.reborn.energy.api.EnergyStorage;
 
 /**
- * Block entity for energy cables. Stores a small energy buffer
- * that participates in network-level energy distribution.
+ * Block entity for energy cables. Cables do not store energy; they expose
+ * an insert-only conduit endpoint that forwards accepted energy through the
+ * connected cable network during the same transaction.
  *
- * <p>Individual cables do not push or pull energy. Instead, all cables
- * in a connected group form a {@link CableNetwork} which pools energy
- * and distributes it evenly to all connected devices each tick.
+ * <p>Any energy that cannot be delivered to a connected consumer is rejected,
+ * allowing the source to keep it instead of leaving power buffered in cables.
  */
 public class CableBlockEntity extends BaseBlockEntity
         implements HasEnergyStorage, AcceptsLowTierEnergy {
 
-    private static final long CAPACITY = 640;
-    private static final long MAX_TRANSFER = 640;
-
-    private final EnergyComponent energy = new EnergyComponent(
-            CAPACITY, MAX_TRANSFER, MAX_TRANSFER, this::markDirtyAndSync);
+    private static final long TRANSFER_RATE = 640;
 
     private final CableBlock.ConnectionType[] connectionCache = new CableBlock.ConnectionType[6];
     private boolean connectionCacheDirty = true;
@@ -48,7 +42,7 @@ public class CableBlockEntity extends BaseBlockEntity
 
     @Override
     public EnergyStorage energyStorage(@Nullable Direction side) {
-        return energy;
+        return new CableEnergyStorage(side);
     }
 
     // ==================== Lifecycle ====================
@@ -109,20 +103,9 @@ public class CableBlockEntity extends BaseBlockEntity
         }
     }
 
-    // ==================== Energy Access (for CableNetwork) ====================
+    // ==================== Transfer Access ====================
 
-    public long getStoredEnergy() {
-        return energy.getAmount();
-    }
-
-    public long getCapacity() {
-        return CAPACITY;
-    }
-
-    public void setStoredEnergy(long amount) {
-        energy.setAmount(amount);
-        markDirtyAndSync();
-    }
+    public long getTransferRate() { return TRANSFER_RATE; }
 
     // ==================== Tick ====================
 
@@ -135,20 +118,39 @@ public class CableBlockEntity extends BaseBlockEntity
 
     public ProbeResult getProbeResult() {
         return ProbeResult.builder("Energy Cable")
-                .entry("Energy", String.format("%d / %d RF", energy.getAmount(), CAPACITY), ChatFormatting.AQUA)
+                .entry("Transfer", String.format("%d RF/t", TRANSFER_RATE), ChatFormatting.AQUA)
                 .build();
     }
 
-    // ==================== NBT ====================
+    private final class CableEnergyStorage implements EnergyStorage {
+        @Nullable
+        private final Direction side;
 
-    @Override
-    protected void saveLogisticsData(CompoundTag tag, HolderLookup.Provider registries) {
-        energy.writeNbt(tag, "Energy");
-    }
+        private CableEnergyStorage(@Nullable Direction side) {
+            this.side = side;
+        }
 
-    @Override
-    protected void loadLogisticsData(CompoundTag tag, HolderLookup.Provider registries) {
-        energy.readNbt(tag, "Energy");
-        invalidateConnectionCache();
+        @Override
+        public boolean supportsInsertion() { return true; }
+
+        @Override
+        public long insert(long maxAmount, TransactionContext transaction) {
+            if (maxAmount <= 0 || level == null || level.isClientSide()) {
+                return 0;
+            }
+            return CableNetworkManager.get(level).insert(level, worldPosition, side, maxAmount, transaction);
+        }
+
+        @Override
+        public boolean supportsExtraction() { return false; }
+
+        @Override
+        public long extract(long maxAmount, TransactionContext transaction) { return 0; }
+
+        @Override
+        public long getAmount() { return 0; }
+
+        @Override
+        public long getCapacity() { return 0; }
     }
 }
