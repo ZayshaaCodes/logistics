@@ -76,7 +76,9 @@ public class CableBlockEntityRenderer implements BlockEntityRenderer<CableBlockE
 
         // Arm models per direction
         for (Direction direction : Direction.values()) {
-            CableBlock.ConnectionType type = entity.getCachedConnectionType(direction);
+            CableBlock.ConnectionType type = blockState.getBlock() instanceof CableBlock cableBlock
+                    ? cableBlock.getConnectionType(entity.getLevel(), entity.getBlockPos(), direction)
+                    : CableBlock.ConnectionType.NONE;
             if (type == CableBlock.ConnectionType.NONE) continue;
 
             ResourceId armModel = type == CableBlock.ConnectionType.DEVICE ? ARM_EXTENDED_MODEL : ARM_MODEL;
