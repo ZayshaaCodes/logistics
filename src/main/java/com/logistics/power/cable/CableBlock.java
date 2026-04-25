@@ -6,6 +6,7 @@ import com.logistics.core.lib.support.ProbeResult;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
@@ -155,10 +156,21 @@ public class CableBlock extends BaseEntityBlock implements ProbeBehavior.Probeab
 
     @Override
     public BlockState playerWillDestroy(Level world, BlockPos pos, BlockState state, Player player) {
-        if (!world.isClientSide() && world.getBlockEntity(pos) instanceof CableBlockEntity cable) {
-            cable.onCableRemoved();
-        }
+        removeCableFromNetwork(world, pos);
         return super.playerWillDestroy(world, pos, state, player);
+    }
+
+    @Override
+    protected void affectNeighborsAfterRemoval(
+            BlockState state, ServerLevel world, BlockPos pos, boolean movedByPiston) {
+        removeCableFromNetwork(world, pos);
+        super.affectNeighborsAfterRemoval(state, world, pos, movedByPiston);
+    }
+
+    private void removeCableFromNetwork(Level world, BlockPos pos) {
+        if (!world.isClientSide()) {
+            CableNetworkManager.get(world).removeCable(pos);
+        }
     }
 
     @Override
