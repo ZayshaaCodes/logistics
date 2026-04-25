@@ -9,6 +9,7 @@ import com.logistics.core.lib.support.ProbeResult;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
@@ -141,12 +142,12 @@ public class CableBlockEntity extends BaseBlockEntity
     // ==================== NBT ====================
 
     @Override
-    protected void saveLogisticsData(CompoundTag tag) {
+    protected void saveLogisticsData(CompoundTag tag, HolderLookup.Provider registries) {
         energy.writeNbt(tag, "Energy");
     }
 
     @Override
-    protected void loadLogisticsData(CompoundTag tag) {
+    protected void loadLogisticsData(CompoundTag tag, HolderLookup.Provider registries) {
         energy.readNbt(tag, "Energy");
         invalidateConnectionCache();
     }
