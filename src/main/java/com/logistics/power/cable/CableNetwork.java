@@ -1,7 +1,9 @@
 package com.logistics.power.cable;
 
+import com.logistics.core.lib.power.AbstractEngineBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.Level;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 import team.reborn.energy.api.EnergyStorage;
@@ -103,6 +105,7 @@ public class CableNetwork {
         }
 
         // 2. Find all unique device connections at the network boundary
+        List<EnergyStorage> sources = new ArrayList<>();
         List<EnergyStorage> targets = new ArrayList<>();
         Set<BlockPos> seenDevices = new HashSet<>();
 
@@ -114,13 +117,19 @@ public class CableNetwork {
 
                 EnergyStorage storage = EnergyStorage.SIDED.find(level, neighborPos, dir.getOpposite());
                 if (storage != null) {
-                    targets.add(storage);
+                    BlockEntity blockEntity = level.getBlockEntity(neighborPos);
+                    if (storage.supportsInsertion()) {
+                        targets.add(storage);
+                    }
+                    if (storage.supportsExtraction() && !isManagedPushSource(blockEntity)) {
+                        sources.add(storage);
+                    }
                 }
             }
         }
 
         // 3. Pull energy from sources into the network
-        networkAmount += transferEnergy(targets, networkCapacity - networkAmount, true);
+        networkAmount += transferEnergy(sources, networkCapacity - networkAmount, true);
 
         // 4. Push energy from the network to consumers
         networkAmount -= transferEnergy(targets, networkAmount, false);
@@ -180,5 +189,9 @@ public class CableNetwork {
             transaction.commit();
             return totalTransferred;
         }
+    }
+
+    private boolean isManagedPushSource(BlockEntity blockEntity) {
+        return blockEntity instanceof AbstractEngineBlockEntity;
     }
 }
