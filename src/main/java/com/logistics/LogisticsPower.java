@@ -15,11 +15,15 @@ import com.logistics.power.engine.block.entity.RedstoneEngineBlockEntity;
 import com.logistics.power.engine.block.entity.StirlingEngineBlockEntity;
 import com.logistics.power.engine.ui.StirlingEngineScreenHandler;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
@@ -51,10 +55,12 @@ public final class LogisticsPower extends LogisticsMod implements DomainBootstra
         LOGGER.info("Registering {}", domain());
 
         BLOCK.register();
+        ITEM.register();
         ENTITY.register();
         SCREEN.register();
 
         addCreativeTabEntries();
+        addVanillaCreativeTabEntries();
 
         ServerTickEvents.END_SERVER_TICK.register(CableNetworkManager::tickAll);
         ServerWorldEvents.UNLOAD.register((server, level) -> CableNetworkManager.clearLevel(level));
@@ -106,6 +112,18 @@ public final class LogisticsPower extends LogisticsMod implements DomainBootstra
         }
     }
 
+    public static final class ITEM {
+        private ITEM() {}
+
+        public static Item RUBBER_CHUNK;
+        public static Item RUBBER_MIX;
+
+        static void register() {
+            RUBBER_CHUNK = INSTANCE.registerItem("rubber_chunk", Item::new);
+            RUBBER_MIX = INSTANCE.registerItem("rubber_mix", Item::new);
+        }
+    }
+
     public static final class SCREEN {
         private SCREEN() {}
 
@@ -121,11 +139,20 @@ public final class LogisticsPower extends LogisticsMod implements DomainBootstra
 
     private static void addCreativeTabEntries() {
         LogisticsCore.CREATIVE_TAB.addItems(
+                ITEM.RUBBER_MIX,
+                ITEM.RUBBER_CHUNK,
                 BLOCK.REDSTONE_ENGINE,
                 BLOCK.STIRLING_ENGINE,
                 BLOCK.CREATIVE_ENGINE,
                 BLOCK.CREATIVE_SINK,
                 BLOCK.CABLE
         );
+    }
+
+    private static void addVanillaCreativeTabEntries() {
+        ItemGroupEvents.modifyEntriesEvent(CreativeModeTabs.INGREDIENTS).register(entries -> {
+            entries.addAfter(Items.SLIME_BALL, ITEM.RUBBER_MIX);
+            entries.addAfter(ITEM.RUBBER_MIX, ITEM.RUBBER_CHUNK);
+        });
     }
 }

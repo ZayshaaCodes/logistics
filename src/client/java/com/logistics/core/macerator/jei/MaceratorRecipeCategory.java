@@ -3,6 +3,7 @@ package com.logistics.core.macerator.jei;
 import com.logistics.LogisticsCore;
 import com.logistics.LogisticsMod;
 import com.logistics.core.macerator.MaceratorRecipe;
+import java.util.List;
 import mezz.jei.api.gui.builder.IRecipeLayoutBuilder;
 import mezz.jei.api.gui.drawable.IDrawable;
 import mezz.jei.api.gui.widgets.IRecipeExtrasBuilder;
@@ -11,8 +12,10 @@ import mezz.jei.api.recipe.IFocusGroup;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.api.recipe.types.IRecipeType;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
 
 /**
@@ -80,8 +83,16 @@ public class MaceratorRecipeCategory implements IRecipeCategory<MaceratorRecipe>
     @Override
     public void setRecipe(IRecipeLayoutBuilder builder, MaceratorRecipe recipe, IFocusGroup focuses) {
         builder.addSlot(RecipeIngredientRole.INPUT, INPUT_X, INPUT_Y)
-            .add(recipe.getIngredient());
+            .addItemStacks(getInputStacks(recipe));
         builder.addSlot(RecipeIngredientRole.OUTPUT, OUTPUT_X, OUTPUT_Y)
             .add(recipe.getResultItem());
+    }
+
+    private static List<ItemStack> getInputStacks(MaceratorRecipe recipe) {
+        return BuiltInRegistries.ITEM.stream()
+            .filter(item -> item != Items.AIR)
+            .map(ItemStack::new)
+            .filter(recipe::matches)
+            .toList();
     }
 }

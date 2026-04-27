@@ -1,12 +1,15 @@
 package com.logistics.power.render;
 
-import com.logistics.LogisticsPower;
 import com.logistics.LogisticsPowerClient;
 import com.logistics.core.lib.resource.ResourceId;
-import com.logistics.power.cable.CableBlock;
 import com.logistics.power.cable.CableBlockEntity;
+import com.logistics.power.cable.CableRenderModelInfo;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import net.fabricmc.fabric.api.client.model.loading.v1.ExtraModelKey;
 import net.fabricmc.fabric.api.client.model.loading.v1.FabricBakedModelManager;
 import net.minecraft.client.Minecraft;
@@ -20,25 +23,13 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.state.CameraRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.HashMap;
-import java.util.Map;
-
-/**
- * Renders energy cables with core + directional arm models,
- * following the same pattern as pipes.
- */
 public class CableBlockEntityRenderer implements BlockEntityRenderer<CableBlockEntity, CableRenderState> {
 
     private final FabricBakedModelManager modelManager;
     private final Map<ResourceId, BlockStateModel> modelsCache = new HashMap<>();
-
-    private static final ResourceId CORE_MODEL = LogisticsPower.model("cable_core");
-    private static final ResourceId ARM_MODEL = LogisticsPower.model("cable_arm");
-    private static final ResourceId ARM_EXTENDED_MODEL = LogisticsPower.model("cable_arm_extended");
 
     public CableBlockEntityRenderer(BlockEntityRendererProvider.Context ctx) {
         this.modelManager = (FabricBakedModelManager) Minecraft.getInstance().getModelManager();
@@ -52,6 +43,17 @@ public class CableBlockEntityRenderer implements BlockEntityRenderer<CableBlockE
             return null;
         }
         return model;
+    }
+
+    private BlockStateModel getCachedModel(ResourceId modelId) {
+        BlockStateModel cached = modelsCache.get(modelId);
+        if (cached == null) {
+            cached = getModel(modelId);
+            if (cached != null) {
+                modelsCache.put(modelId, cached);
+            }
+        }
+        return cached;
     }
 
     @Override
@@ -68,77 +70,73 @@ public class CableBlockEntityRenderer implements BlockEntityRenderer<CableBlockE
         BlockEntityRenderState.extractBase(entity, state, crumblingOverlay);
 
         BlockState blockState = entity.getBlockState();
-        state.blockState = blockState;
-        state.models.clear();
+        CableRenderModelInfo.ModelInfo modelInfo = CableRenderModelInfo.resolve(entity.getLevel(), entity.getBlockPos(), blockState);
+        BlockStateModel cached = getCachedModel(modelInfo.modelId());
 
-        // Core model
-        state.models.add(new CableRenderState.ModelRenderInfo(CORE_MODEL));
-
-        // Arm models per direction
-        for (Direction direction : Direction.values()) {
-            CableBlock.ConnectionType type = blockState.getBlock() instanceof CableBlock cableBlock
-                    ? cableBlock.getConnectionType(entity.getLevel(), entity.getBlockPos(), direction)
-                    : CableBlock.ConnectionType.NONE;
-            if (type == CableBlock.ConnectionType.NONE) continue;
-
-            ResourceId armModel = type == CableBlock.ConnectionType.DEVICE ? ARM_EXTENDED_MODEL : ARM_MODEL;
-            state.models.add(new CableRenderState.ModelRenderInfo(armModel, direction));
-        }
-
-        // Populate model references from cache
-        for (CableRenderState.ModelRenderInfo modelInfo : state.models) {
-            BlockStateModel cached = modelsCache.get(modelInfo.modelId);
-            if (cached == null) {
-                cached = getModel(modelInfo.modelId);
-                if (cached == null) {
-                    modelInfo.model = null;
-                    continue;
-                }
-                modelsCache.put(modelInfo.modelId, cached);
+        List<CableRenderState.RenderedModel> plugModels = new ArrayList<>();
+        for (CableRenderModelInfo.ModelInfo plugInfo : CableRenderModelInfo.plugModels(
+                entity.getLevel(), entity.getBlockPos(), blockState)) {
+            BlockStateModel plugModel = getCachedModel(plugInfo.modelId());
+            if (plugModel != null) {
+                plugModels.add(new CableRenderState.RenderedModel(
+                        plugInfo.modelId(), plugModel, plugInfo.rotation()));
             }
-            modelInfo.model = cached;
         }
+
+        state.blockState = blockState;
+        state.modelId = modelInfo.modelId();
+        state.rotation = modelInfo.rotation();
+        state.model = cached;
+        state.plugModels = List.copyOf(plugModels);
     }
 
     @Override
     public void submit(
             CableRenderState state, PoseStack matrices, SubmitNodeCollector queue, CameraRenderState cameraState) {
 
-        if (state.models.isEmpty()) return;
+        if (state.model == null) return;
 
         RenderType renderLayer = state.blockState == null
                 ? RenderTypes.cutoutMovingBlock()
                 : ItemBlockRenderTypes.getRenderType(state.blockState);
 
-        for (CableRenderState.ModelRenderInfo modelInfo : state.models) {
-            if (modelInfo.model == null) continue;
+        submitModel(state, matrices, queue, renderLayer, state.model, state.rotation);
 
-            if (modelInfo.armDirection != null) {
-                matrices.pushPose();
-                matrices.translate(0.5, 0.5, 0.5);
-                applyDirectionRotation(matrices, modelInfo.armDirection);
-                matrices.translate(-0.5, -0.5, -0.5);
-            }
-
-            queue.submitBlockModel(
-                    matrices, renderLayer, modelInfo.model,
-                    1.0f, 1.0f, 1.0f,
-                    state.lightCoords, OverlayTexture.NO_OVERLAY, 0);
-
-            if (modelInfo.armDirection != null) {
-                matrices.popPose();
-            }
+        for (CableRenderState.RenderedModel plugModel : state.plugModels) {
+            submitModel(state, matrices, queue, renderLayer, plugModel.model(), plugModel.rotation());
         }
     }
 
-    private static void applyDirectionRotation(PoseStack matrices, Direction direction) {
-        switch (direction) {
-            case SOUTH -> matrices.mulPose(Axis.YP.rotationDegrees(180));
-            case EAST -> matrices.mulPose(Axis.YP.rotationDegrees(-90));
-            case WEST -> matrices.mulPose(Axis.YP.rotationDegrees(90));
-            case UP -> matrices.mulPose(Axis.XP.rotationDegrees(90));
-            case DOWN -> matrices.mulPose(Axis.XP.rotationDegrees(-90));
-            default -> {}
+    private static void submitModel(
+            CableRenderState state, PoseStack matrices, SubmitNodeCollector queue, RenderType renderLayer,
+            BlockStateModel model, CableRenderModelInfo.ModelRotation rotation) {
+
+        if (rotation != null) {
+            matrices.pushPose();
+            matrices.translate(0.5, 0.5, 0.5);
+            applyModelRotation(matrices, rotation);
+            matrices.translate(-0.5, -0.5, -0.5);
+        }
+
+        queue.submitBlockModel(
+                matrices, renderLayer, model,
+                1.0f, 1.0f, 1.0f,
+                state.lightCoords, OverlayTexture.NO_OVERLAY, 0);
+
+        if (rotation != null) {
+            matrices.popPose();
+        }
+    }
+
+    private static void applyModelRotation(PoseStack matrices, CableRenderModelInfo.ModelRotation rotation) {
+        for (CableRenderModelInfo.ModelRotation.RotationStep step : rotation.steps()) {
+            if (step.degrees() == 0) continue;
+
+            switch (step.axis()) {
+                case X -> matrices.mulPose(Axis.XP.rotationDegrees(step.degrees()));
+                case Y -> matrices.mulPose(Axis.YP.rotationDegrees(step.degrees()));
+                case Z -> matrices.mulPose(Axis.ZP.rotationDegrees(step.degrees()));
+            }
         }
     }
 }

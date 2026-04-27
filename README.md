@@ -88,10 +88,11 @@ Transport items through networks with different behaviors:
 [View all pipes →](https://indemnity83.github.io/logistics/pipes/)
 
 ### Power
-RF energy generation with engines:
+RF energy generation and distribution:
 - **Redstone Engine** - Simple, safe, steady power
 - **Stirling Engine** - Fuel-powered with heat management
 - **Creative Engine** - Infinite power for testing and creative mode
+- **Power Cable** - Distributes energy from engines to connected machines
 
 [Learn about power systems →](https://indemnity83.github.io/logistics/power/)
 

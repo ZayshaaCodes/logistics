@@ -4,6 +4,7 @@ import com.logistics.core.bootstrap.DomainBootstrap;
 import com.logistics.core.lib.power.AbstractEngineBlockEntity;
 import com.logistics.core.lib.resource.ResourceId;
 import com.logistics.core.render.ModelKeyRegistry;
+import com.logistics.power.cable.CableRenderModelInfo;
 import com.logistics.power.render.CableBlockEntityRenderer;
 import com.logistics.power.render.EngineBlockEntityRenderer;
 import com.logistics.power.screen.StirlingEngineScreen;
@@ -80,13 +81,12 @@ public final class LogisticsPowerClient implements DomainBootstrap {
         public static final ExtraModelKey<BlockStateModel> CREATIVE_PISTON = REGISTRY.registerModel("creative_engine_piston");
 
         static {
-            registerCableModel("cable_core");
-            registerCableModel("cable_arm");
-            registerCableModel("cable_arm_extended");
+            for (ResourceId modelId : CableRenderModelInfo.modelIds()) {
+                registerCableModel(modelId);
+            }
         }
 
-        private static void registerCableModel(String name) {
-            ResourceId id = LogisticsPower.model(name);
+        private static void registerCableModel(ResourceId id) {
             ExtraModelKey<BlockStateModel> key = ExtraModelKey.create(id::toString);
             CABLE_LOOKUP.put(id, key);
         }
