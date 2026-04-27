@@ -1,6 +1,6 @@
 {
   "model": {
     "type": "minecraft:model",
-    "model": "logistics:block/power/cable_core"
+    "model": "logistics:block/power/cable_topology_blank"
   }
 }

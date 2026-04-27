@@ -1,10 +1,10 @@
 {
-  "type": "minecraft:crafting_shaped",
-  "pattern": ["RCR"],
-  "key": {
-    "R": "minecraft:redstone",
-    "C": "minecraft:copper_ingot"
-  },
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    "logistics:core/copper_core",
+    "logistics:power/rubber_chunk",
+    "logistics:power/rubber_chunk"
+  ],
   "result": {
     "count": 8,
     "id": "logistics:power/cable"

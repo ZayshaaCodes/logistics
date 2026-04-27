@@ -199,6 +199,9 @@ public class CableBlock extends BaseEntityBlock implements ProbeBehavior.Probeab
      * Cables connect to other cables and any block exposing EnergyStorage.
      */
     public ConnectionType getConnectionType(BlockGetter world, BlockPos pos, Direction direction) {
+        if (world.getBlockEntity(pos) instanceof CableBlockEntity cable) {
+            return cable.getCachedConnectionType(direction);
+        }
         return getDynamicConnectionType(world, pos, direction);
     }
 

@@ -41,12 +41,12 @@ public final class MenuBehavior {
      * @return SUCCESS if menu was opened, PASS if no menu available
      */
     public static InteractionResult tryOpenMenu(Level level, BlockPos pos, Player player) {
-        if (level.isClientSide()) {
-            return InteractionResult.SUCCESS;
-        }
-
         BlockEntity blockEntity = level.getBlockEntity(pos);
         if (blockEntity instanceof HasMenu hasMenu) {
+            if (level.isClientSide()) {
+                return InteractionResult.SUCCESS;
+            }
+
             player.openMenu(hasMenu.createMenuProvider());
             return InteractionResult.CONSUME;
         }
