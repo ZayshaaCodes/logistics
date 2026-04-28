@@ -4,6 +4,7 @@ import com.logistics.LogisticsPower;
 import com.logistics.core.lib.BaseBlockEntity;
 import com.logistics.core.lib.block.capability.HasEnergyStorage;
 import com.logistics.core.lib.power.AcceptsLowTierEnergy;
+import com.logistics.core.lib.power.EnergyDemandProvider;
 import com.logistics.core.lib.storage.NbtCompat;
 import com.logistics.core.lib.support.ProbeResult;
 import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext;
@@ -27,7 +28,7 @@ import team.reborn.energy.api.EnergyStorage;
  * custom logic instead of using {@link com.logistics.core.lib.energy.EnergyComponent}.
  */
 public class CreativeSinkBlockEntity extends BaseBlockEntity
-        implements AcceptsLowTierEnergy, HasEnergyStorage {
+    implements AcceptsLowTierEnergy, HasEnergyStorage, EnergyDemandProvider {
     private static final long[] DRAIN_RATES = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 50, 100, Long.MAX_VALUE};
     private int drainRateIndex = 4; // Default 5 RF/t
     private long energyLastTick = 0;
@@ -102,6 +103,11 @@ public class CreativeSinkBlockEntity extends BaseBlockEntity
 
     public long getDrainRate() {
         return DRAIN_RATES[drainRateIndex];
+    }
+
+    @Override
+    public long networkDemandPerTick() {
+        return getDrainRate() == Long.MAX_VALUE ? Long.MAX_VALUE : Math.max(0, getDrainRate() - energyThisTick);
     }
 
     /**

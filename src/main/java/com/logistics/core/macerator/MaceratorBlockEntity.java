@@ -6,6 +6,7 @@ import com.logistics.core.lib.block.behavior.MenuBehavior;
 import com.logistics.core.lib.block.capability.HasEnergyStorage;
 import com.logistics.core.lib.block.capability.HasItemStorage;
 import com.logistics.core.lib.energy.EnergyComponent;
+import com.logistics.core.lib.power.EnergyDemandProvider;
 import com.logistics.core.lib.items.ItemInventoryComponent;
 import com.logistics.core.lib.resource.ResourceId;
 import com.logistics.core.lib.storage.NbtCompat;
@@ -51,7 +52,7 @@ import team.reborn.energy.api.EnergyStorage;
  * </ul>
  */
 public class MaceratorBlockEntity extends BaseBlockEntity
-    implements HasItemStorage, HasEnergyStorage, WorldlyContainer, MenuBehavior.HasMenu {
+    implements HasItemStorage, HasEnergyStorage, WorldlyContainer, MenuBehavior.HasMenu, EnergyDemandProvider {
 
     static final int INPUT_SLOT = 0;
     static final int OUTPUT_SLOT = 1;
@@ -224,6 +225,14 @@ public class MaceratorBlockEntity extends BaseBlockEntity
     @Override
     public EnergyStorage energyStorage(@Nullable Direction side) {
         return energy;
+    }
+
+    @Override
+    public long networkDemandPerTick() {
+        MaceratorRecipe recipe = activeRecipeId != null
+            ? MaceratorRecipeManager.getRecipe(activeRecipeId)
+            : findMatchingRecipe();
+        return recipe != null && canAcceptOutput(recipe.getResultItem()) ? ENERGY_PER_TICK : 0;
     }
 
     // ==================== WorldlyContainer (Sided Inventory) ====================

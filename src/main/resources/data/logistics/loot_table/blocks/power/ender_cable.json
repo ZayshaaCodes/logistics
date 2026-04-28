@@ -11,7 +11,7 @@
       "entries": [
         {
           "type": "minecraft:item",
-          "name": "logistics:power/cable"
+          "name": "logistics:power/ender_cable"
         }
       ]
     }

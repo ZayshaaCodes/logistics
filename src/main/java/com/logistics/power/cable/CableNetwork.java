@@ -20,7 +20,7 @@ import java.util.Queue;
 import java.util.Set;
 
 /**
- * Represents a connected group of energy cables that transfers energy without storage.
+ * Represents a connected group of cables that transfers energy without storage.
  *
  * <p>Each tick, the network:
  * <ol>
@@ -34,8 +34,6 @@ import java.util.Set;
  * any energy that cannot be delivered is rejected rather than stored.
  */
 public class CableNetwork {
-    private static final long MAX_TRANSFER_PER_DEVICE = 640;
-
     private final Set<BlockPos> cablePositions = new HashSet<>();
 
     public Set<BlockPos> getCablePositions() {
@@ -82,7 +80,7 @@ public class CableNetwork {
      */
     public void tick(Level level) {
         DeviceConnections connections = collectDeviceConnections(level, null);
-        transferBetween(connections.sources(), connections.targets(), getNetworkTransferLimit());
+        transferBetween(connections.sources(), connections.targets(), getNetworkTransferLimit(level));
     }
 
     public long insert(
@@ -94,7 +92,10 @@ public class CableNetwork {
 
         BlockPos sourcePos = sourceSide == null ? null : entryCablePos.relative(sourceSide);
         DeviceConnections connections = collectDeviceConnections(level, sourcePos);
-        return insertIntoTargets(connections.targets(), Math.min(maxAmount, getNetworkTransferLimit()), transaction);
+        long transferLimit = Math.min(
+            maxAmount,
+            Math.min(cableTransferRate(level, entryCablePos), getNetworkTransferLimit(level)));
+        return insertIntoTargets(connections.targets(), transferLimit, transaction);
     }
 
     private DeviceConnections collectDeviceConnections(Level level, @Nullable BlockPos excludedPos) {
@@ -125,8 +126,16 @@ public class CableNetwork {
         return new DeviceConnections(sources, targets);
     }
 
-    private long getNetworkTransferLimit() {
-        return Math.max(1, cablePositions.size()) * MAX_TRANSFER_PER_DEVICE;
+    private long getNetworkTransferLimit(Level level) {
+        long limit = 0;
+        for (BlockPos cablePos : cablePositions) {
+            limit += cableTransferRate(level, cablePos);
+        }
+        return limit;
+    }
+
+    private long cableTransferRate(Level level, BlockPos cablePos) {
+        return level.getBlockEntity(cablePos) instanceof CableBlockEntity cable ? cable.getTransferRate() : 0;
     }
 
     private long transferBetween(List<EnergyStorage> sources, List<EnergyStorage> targets, long maxAmount) {
@@ -145,9 +154,7 @@ public class CableNetwork {
             for (int targetIndex = 0; targetIndex < validTargets.size(); targetIndex++) {
                 EnergyStorage target = validTargets.get(targetIndex);
                 int remainingTargets = validTargets.size() - targetIndex;
-                long targetRemaining = Math.min(
-                        (maxAmount - totalTransferred) / remainingTargets,
-                        MAX_TRANSFER_PER_DEVICE);
+                long targetRemaining = fairShare(maxAmount - totalTransferred, remainingTargets);
 
                 for (EnergyStorage source : validSources) {
                     if (source == target || targetRemaining <= 0 || totalTransferred >= maxAmount) continue;
@@ -192,7 +199,7 @@ public class CableNetwork {
             EnergyStorage target = validTargets.get(i);
             int remainingTargets = validTargets.size() - i;
             long remaining = maxAmount - totalInserted;
-            long targetMax = Math.min(remaining / remainingTargets, MAX_TRANSFER_PER_DEVICE);
+            long targetMax = fairShare(remaining, remainingTargets);
 
             totalInserted += target.insert(targetMax, transaction);
         }
@@ -222,6 +229,11 @@ public class CableNetwork {
 
     private boolean isManagedPushSource(BlockEntity blockEntity) {
         return blockEntity instanceof AbstractEngineBlockEntity;
+    }
+
+    private long fairShare(long remaining, int remainingTargets) {
+        if (remaining <= 0 || remainingTargets <= 0) return 0;
+        return Math.max(1, remaining / remainingTargets);
     }
 
     private record DeviceConnections(List<EnergyStorage> sources, List<EnergyStorage> targets) {}

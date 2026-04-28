@@ -12,6 +12,7 @@ import com.logistics.core.lib.BaseBlockEntity;
 import com.logistics.core.lib.energy.EnergyComponent;
 import com.logistics.core.lib.block.capability.HasEnergyStorage;
 import com.logistics.core.lib.block.capability.PipeConnection;
+import com.logistics.core.lib.power.EnergyDemandProvider;
 import com.logistics.core.lib.storage.NbtCompat;
 import com.logistics.core.lib.support.ProbeResult;
 import java.util.ArrayList;
@@ -36,7 +37,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 import team.reborn.energy.api.EnergyStorage;
 
-public class LaserQuarryBlockEntity extends BaseBlockEntity implements PipeConnection, HasEnergyStorage {
+public class LaserQuarryBlockEntity extends BaseBlockEntity implements PipeConnection, HasEnergyStorage, EnergyDemandProvider {
     private static final long REGISTRY_TTL_TICKS = 200L;
     private static final Map<ResourceKey<Level>, Map<Long, Long>> ACTIVE_QUARRIES = new HashMap<>();
     private static final long FRAME_BUILD_COST = 240L;
@@ -1100,6 +1101,11 @@ public class LaserQuarryBlockEntity extends BaseBlockEntity implements PipeConne
         }
 
         return speed;
+    }
+
+    @Override
+    public long networkDemandPerTick() {
+        return finished ? 0 : getMoveCost();
     }
 
     // ==================== Probe Support ====================
