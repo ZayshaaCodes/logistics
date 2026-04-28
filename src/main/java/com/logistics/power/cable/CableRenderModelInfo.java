@@ -24,6 +24,7 @@ import org.jetbrains.annotations.Nullable;
 
 public final class CableRenderModelInfo {
     private static final String LOOKUP_RESOURCE = "/assets/logistics/power/cable_render_lookup.json";
+    private static final String PLUG_MODEL = "cable_plug_n";
     private static final Gson GSON = new GsonBuilder().create();
 
     private static final int NORTH_MASK = 1;
@@ -33,14 +34,13 @@ public final class CableRenderModelInfo {
     private static final int UP_MASK = 1 << 4;
     private static final int DOWN_MASK = 1 << 5;
     private static final int ALL_CONNECTIONS_MASK = NORTH_MASK | EAST_MASK | SOUTH_MASK | WEST_MASK | UP_MASK | DOWN_MASK;
-    private static final ResourceId PLUG_MODEL = model("cable_plug_n");
 
     private static final RenderLookup LOOKUP = loadLookup();
 
     private CableRenderModelInfo() {}
 
     public static ModelInfo resolve(Level level, BlockPos pos, BlockState state) {
-        return LOOKUP.modelFor(connectionMask(level, pos, state));
+        return LOOKUP.modelFor(tier(state), connectionMask(level, pos, state));
     }
 
     public static List<ModelInfo> plugModels(Level level, BlockPos pos, BlockState state) {
@@ -49,18 +49,22 @@ public final class CableRenderModelInfo {
         List<ModelInfo> plugs = new ArrayList<>();
         for (Direction direction : Direction.values()) {
             if (cableBlock.getConnectionType(level, pos, direction) == CableBlock.ConnectionType.DEVICE) {
-                plugs.add(plugModel(direction));
+                plugs.add(plugModel(cableBlock.tier(), direction));
             }
         }
         return List.copyOf(plugs);
     }
 
     public static ModelInfo plugModel(Direction direction) {
-        return new ModelInfo(PLUG_MODEL, plugRotation(direction));
+        return plugModel(CableTier.COPPER, direction);
     }
 
     public static List<ResourceId> modelIds() {
         return LOOKUP.modelIds();
+    }
+
+    private static ModelInfo plugModel(CableTier tier, Direction direction) {
+        return new ModelInfo(model(tier.modelName(PLUG_MODEL)), plugRotation(direction));
     }
 
     private static int connectionMask(Level level, BlockPos pos, BlockState state) {
@@ -86,35 +90,35 @@ public final class CableRenderModelInfo {
             }
 
             JsonObject root = GSON.fromJson(new InputStreamReader(stream, StandardCharsets.UTF_8), JsonObject.class);
-            ResourceId isolatedCable = model(root.get("isolated").getAsString());
-            Map<String, ResourceId> models = parseModels(root.getAsJsonObject("models"));
-            ModelInfo[] modelsByMask = parseMasks(root.getAsJsonObject("masks"), models);
+            String isolatedCable = root.get("isolated").getAsString();
+            Map<String, String> models = parseModels(root.getAsJsonObject("models"));
+            ModelSpec[] modelsByMask = parseMasks(root.getAsJsonObject("masks"), models);
 
             validateLookup(modelsByMask);
-            return new RenderLookup(new ModelInfo(isolatedCable, null), modelsByMask, modelIds(isolatedCable, modelsByMask));
+            return new RenderLookup(new ModelSpec(isolatedCable, null), modelsByMask, modelIds(isolatedCable, modelsByMask));
         } catch (Exception e) {
             throw new IllegalStateException("Failed to load cable render lookup", e);
         }
     }
 
-    private static Map<String, ResourceId> parseModels(JsonObject json) {
-        Map<String, ResourceId> models = new LinkedHashMap<>();
+    private static Map<String, String> parseModels(JsonObject json) {
+        Map<String, String> models = new LinkedHashMap<>();
         for (Map.Entry<String, JsonElement> entry : json.entrySet()) {
-            models.put(entry.getKey(), model(entry.getValue().getAsString()));
+            models.put(entry.getKey(), entry.getValue().getAsString());
         }
         return models;
     }
 
-    private static ModelInfo[] parseMasks(JsonObject json, Map<String, ResourceId> models) {
-        ModelInfo[] lookup = new ModelInfo[ALL_CONNECTIONS_MASK + 1];
+    private static ModelSpec[] parseMasks(JsonObject json, Map<String, String> models) {
+        ModelSpec[] lookup = new ModelSpec[ALL_CONNECTIONS_MASK + 1];
         for (Map.Entry<String, JsonElement> entry : json.entrySet()) {
             int mask = Integer.parseInt(entry.getKey(), 16);
             JsonArray spec = entry.getValue().getAsJsonArray();
-            ResourceId modelId = models.get(spec.get(0).getAsString());
-            if (modelId == null) {
+            String modelName = models.get(spec.get(0).getAsString());
+            if (modelName == null) {
                 throw new IllegalArgumentException("Unknown cable topology key: " + spec.get(0).getAsString());
             }
-            lookup[mask] = new ModelInfo(modelId, rotation(spec));
+            lookup[mask] = new ModelSpec(modelName, rotation(spec));
         }
         return lookup;
     }
@@ -143,7 +147,7 @@ public final class CableRenderModelInfo {
         return ModelRotation.step(axis, Integer.parseInt(token.substring(1)));
     }
 
-    private static void validateLookup(ModelInfo[] modelsByMask) {
+    private static void validateLookup(ModelSpec[] modelsByMask) {
         for (int mask = 1; mask <= ALL_CONNECTIONS_MASK; mask++) {
             if (modelsByMask[mask] == null) {
                 throw new IllegalStateException("Missing cable render entry for mask 0x" + Integer.toHexString(mask));
@@ -151,14 +155,20 @@ public final class CableRenderModelInfo {
         }
     }
 
-    private static List<ResourceId> modelIds(ResourceId isolatedCable, ModelInfo[] modelsByMask) {
+    private static List<ResourceId> modelIds(String isolatedCable, ModelSpec[] modelsByMask) {
         Set<ResourceId> ids = new LinkedHashSet<>();
-        ids.add(isolatedCable);
-        for (int mask = 1; mask <= ALL_CONNECTIONS_MASK; mask++) {
-            ids.add(modelsByMask[mask].modelId);
+        for (CableTier tier : CableTier.values()) {
+            ids.add(model(tier.modelName(isolatedCable)));
+            for (int mask = 1; mask <= ALL_CONNECTIONS_MASK; mask++) {
+                ids.add(model(tier.modelName(modelsByMask[mask].modelName())));
+            }
+            ids.add(model(tier.modelName(PLUG_MODEL)));
         }
-        ids.add(PLUG_MODEL);
         return List.copyOf(ids);
+    }
+
+    private static CableTier tier(BlockState state) {
+        return state.getBlock() instanceof CableBlock cableBlock ? cableBlock.tier() : CableTier.COPPER;
     }
 
     private static ResourceId model(String name) {
@@ -187,10 +197,16 @@ public final class CableRenderModelInfo {
         };
     }
 
-    private record RenderLookup(ModelInfo isolatedCable, ModelInfo[] modelsByMask, List<ResourceId> modelIds) {
-        private ModelInfo modelFor(int mask) {
-            if (mask == 0 || mask >= modelsByMask.length) return isolatedCable;
-            return modelsByMask[mask];
+    private record RenderLookup(ModelSpec isolatedCable, ModelSpec[] modelsByMask, List<ResourceId> modelIds) {
+        private ModelInfo modelFor(CableTier tier, int mask) {
+            if (mask == 0 || mask >= modelsByMask.length) return isolatedCable.forTier(tier);
+            return modelsByMask[mask].forTier(tier);
+        }
+    }
+
+    private record ModelSpec(String modelName, @Nullable ModelRotation rotation) {
+        private ModelInfo forTier(CableTier tier) {
+            return new ModelInfo(model(tier.modelName(modelName)), rotation);
         }
     }
 

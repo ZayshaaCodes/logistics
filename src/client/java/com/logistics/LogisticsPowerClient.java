@@ -53,7 +53,9 @@ public final class LogisticsPowerClient implements DomainBootstrap {
         BlockEntityRenderers.register(LogisticsPower.ENTITY.CREATIVE_ENGINE_BLOCK_ENTITY, EngineBlockEntityRenderer::new);
 
         // Register cable block entity renderer and cutout rendering
-        BlockRenderLayerMap.putBlock(LogisticsPower.BLOCK.CABLE, ChunkSectionLayer.CUTOUT);
+        BlockRenderLayerMap.putBlock(LogisticsPower.BLOCK.COPPER_CABLE, ChunkSectionLayer.CUTOUT);
+        BlockRenderLayerMap.putBlock(LogisticsPower.BLOCK.GOLD_CABLE, ChunkSectionLayer.CUTOUT);
+        BlockRenderLayerMap.putBlock(LogisticsPower.BLOCK.ENDER_CABLE, ChunkSectionLayer.CUTOUT);
         BlockEntityRenderers.register(LogisticsPower.ENTITY.CABLE_BLOCK_ENTITY, CableBlockEntityRenderer::new);
 
         // Register screens

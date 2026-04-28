@@ -35,7 +35,7 @@ import org.jetbrains.annotations.Nullable;
 import team.reborn.energy.api.EnergyStorage;
 
 /**
- * Energy cable block that connects to engines, machines, and other cables
+ * Cable block that connects to engines, machines, and other cables
  * to transfer RF energy across distances.
  *
  * <p>Uses the same visual shape system as pipes (8px core + directional arms)
@@ -70,9 +70,20 @@ public class CableBlock extends BaseEntityBlock implements ProbeBehavior.Probeab
             8 - CABLE_SIZE / 2, 0, 8 - CABLE_SIZE / 2,
             8 + CABLE_SIZE / 2, 8 - CABLE_SIZE / 2, 8 + CABLE_SIZE / 2);
 
+    private final CableTier tier;
+
     public CableBlock(Properties settings) {
+        this(settings, CableTier.COPPER);
+    }
+
+    public CableBlock(Properties settings, CableTier tier) {
         super(settings);
+        this.tier = tier;
         registerDefaultState(defaultBlockState().setValue(WATERLOGGED, false));
+    }
+
+    public CableTier tier() {
+        return tier;
     }
 
     @Override

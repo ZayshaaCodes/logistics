@@ -7,6 +7,7 @@ import com.logistics.power.block.entity.CreativeSinkBlockEntity;
 import com.logistics.power.cable.CableBlock;
 import com.logistics.power.cable.CableBlockEntity;
 import com.logistics.power.cable.CableNetworkManager;
+import com.logistics.power.cable.CableTier;
 import com.logistics.power.engine.block.CreativeEngineBlock;
 import com.logistics.power.engine.block.RedstoneEngineBlock;
 import com.logistics.power.engine.block.StirlingEngineBlock;
@@ -73,7 +74,9 @@ public final class LogisticsPower extends LogisticsMod implements DomainBootstra
         public static Block STIRLING_ENGINE;
         public static Block CREATIVE_ENGINE;
         public static Block CREATIVE_SINK;
-        public static Block CABLE;
+        public static Block COPPER_CABLE;
+        public static Block GOLD_CABLE;
+        public static Block ENDER_CABLE;
 
         static void register() {
             REDSTONE_ENGINE = INSTANCE.registerBlockWithItem("redstone_engine",
@@ -84,8 +87,14 @@ public final class LogisticsPower extends LogisticsMod implements DomainBootstra
                 props -> new CreativeEngineBlock(props.strength(5.0f).sound(SoundType.STONE).noOcclusion()));
             CREATIVE_SINK = INSTANCE.registerBlockWithItem("creative_sink",
                 props -> new CreativeSinkBlock(props.strength(5.0f).sound(SoundType.STONE)));
-            CABLE = INSTANCE.registerBlockWithItem("cable",
-                props -> new CableBlock(props.strength(1.5f).sound(SoundType.COPPER).noOcclusion()));
+            COPPER_CABLE = registerCable("copper_cable", CableTier.COPPER, SoundType.COPPER);
+            GOLD_CABLE = registerCable("gold_cable", CableTier.GOLD, SoundType.METAL);
+            ENDER_CABLE = registerCable("ender_cable", CableTier.ENDER, SoundType.AMETHYST);
+        }
+
+        private static Block registerCable(String name, CableTier tier, SoundType soundType) {
+            return INSTANCE.registerBlockWithItem(name,
+                    props -> new CableBlock(props.strength(1.5f).sound(soundType).noOcclusion(), tier));
         }
     }
 
@@ -108,7 +117,8 @@ public final class LogisticsPower extends LogisticsMod implements DomainBootstra
             CREATIVE_SINK_BLOCK_ENTITY =
                 INSTANCE.registerBlockEntity("creative_sink", CreativeSinkBlockEntity::new, BLOCK.CREATIVE_SINK);
             CABLE_BLOCK_ENTITY =
-                INSTANCE.registerBlockEntity("cable", CableBlockEntity::new, BLOCK.CABLE);
+                INSTANCE.registerBlockEntity("cable", CableBlockEntity::new,
+                        BLOCK.COPPER_CABLE, BLOCK.GOLD_CABLE, BLOCK.ENDER_CABLE);
         }
     }
 
@@ -145,7 +155,9 @@ public final class LogisticsPower extends LogisticsMod implements DomainBootstra
                 BLOCK.STIRLING_ENGINE,
                 BLOCK.CREATIVE_ENGINE,
                 BLOCK.CREATIVE_SINK,
-                BLOCK.CABLE
+                BLOCK.COPPER_CABLE,
+                BLOCK.GOLD_CABLE,
+                BLOCK.ENDER_CABLE
         );
     }
 

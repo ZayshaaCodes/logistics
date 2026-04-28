@@ -2,18 +2,20 @@ package com.logistics.power.cable;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.core.Direction;
 import org.junit.jupiter.api.Test;
 
 class CableRenderModelInfoTest {
-    private static final String[] MODEL_NAMES = {
+    private static final String[] BASE_MODEL_NAMES = {
         "cable_topology_blank",
         "cable_topology_n",
         "cable_topology_ne",
         "cable_topology_ns",
         "cable_topology_nes",
-        "cable_topology_neu",
         "cable_topology_nesw",
+        "cable_topology_neu",
         "cable_topology_nesu",
         "cable_topology_neswu",
         "cable_topology_neswud",
@@ -21,21 +23,10 @@ class CableRenderModelInfoTest {
     };
 
     @Test
-    void modelIdsLoadsRenderLookupJson() {
+    void modelIdsLoadsTieredRenderModels() {
         assertThat(CableRenderModelInfo.modelIds())
                 .extracting(Object::toString)
-                .containsExactly(
-                    "logistics:block/power/cable_topology_blank",
-                        "logistics:block/power/cable_topology_n",
-                        "logistics:block/power/cable_topology_ne",
-                        "logistics:block/power/cable_topology_ns",
-                        "logistics:block/power/cable_topology_nes",
-                        "logistics:block/power/cable_topology_nesw",
-                        "logistics:block/power/cable_topology_neu",
-                        "logistics:block/power/cable_topology_nesu",
-                        "logistics:block/power/cable_topology_neswu",
-                        "logistics:block/power/cable_topology_neswud",
-                        "logistics:block/power/cable_plug_n");
+                .containsExactlyElementsOf(expectedTieredModelIds());
     }
 
     @Test
@@ -56,13 +47,40 @@ class CableRenderModelInfoTest {
     }
 
     @Test
+    void cableTiersUseExpectedTransferRates() {
+        assertThat(CableTier.COPPER.transferRate()).isEqualTo(30);
+        assertThat(CableTier.GOLD.transferRate()).isEqualTo(60);
+        assertThat(CableTier.ENDER.transferRate()).isEqualTo(120);
+    }
+
+    @Test
     void cableTopologyResourcesAreOnClasspath() {
-        for (String modelName : MODEL_NAMES) {
+        for (String modelName : BASE_MODEL_NAMES) {
             assertThat(resourceExists("/assets/logistics/models/block/power/" + modelName + ".json"))
-                    .as(modelName)
+                    .as("base " + modelName)
                     .isTrue();
         }
-        assertThat(resourceExists("/assets/logistics/textures/block/power/cable_copper_insulated.png")).isTrue();
+        for (CableTier tier : CableTier.values()) {
+            for (String modelName : BASE_MODEL_NAMES) {
+                String tieredModel = tier.modelName(modelName);
+                assertThat(resourceExists("/assets/logistics/models/block/power/" + tieredModel + ".json"))
+                        .as(tieredModel)
+                        .isTrue();
+            }
+            assertThat(resourceExists("/assets/logistics/textures/block/power/" + tier.id() + ".png"))
+                    .as(tier.id())
+                    .isTrue();
+        }
+    }
+
+    private static List<String> expectedTieredModelIds() {
+        List<String> modelIds = new ArrayList<>();
+        for (CableTier tier : CableTier.values()) {
+            for (String modelName : BASE_MODEL_NAMES) {
+                modelIds.add("logistics:block/power/" + tier.modelName(modelName));
+            }
+        }
+        return modelIds;
     }
 
     private static boolean resourceExists(String path) {
