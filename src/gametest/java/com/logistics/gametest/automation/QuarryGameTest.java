@@ -5,6 +5,7 @@ import com.logistics.automation.laserquarry.LaserQuarryBlock;
 import com.logistics.automation.laserquarry.entity.LaserQuarryBlockEntity;
 import com.logistics.core.lib.block.capability.PipeConnection;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -65,6 +66,37 @@ public class QuarryGameTest {
         }
 
         context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void testQuarryTracksCommittedEnergyInput(GameTestHelper context) {
+        BlockPos pos = new BlockPos(1, 1, 1);
+
+        context.setBlock(pos, LogisticsAutomation.BLOCK.LASER_QUARRY);
+        LaserQuarryBlockEntity quarry = context.getBlockEntity(pos, LaserQuarryBlockEntity.class);
+
+        if (quarry == null) {
+            context.fail("Expected LaserQuarryBlockEntity");
+            return;
+        }
+
+        try (Transaction transaction = Transaction.openOuter()) {
+            long inserted = quarry.energyStorage(Direction.NORTH).insert(60, transaction);
+            if (inserted != 60) {
+                context.fail("Expected quarry to accept 60 RF, got " + inserted);
+                return;
+            }
+            transaction.commit();
+        }
+
+        context.runAfterDelay(1, () -> {
+            if (quarry.getEnergyReceivedLastTick() != 60) {
+                context.fail("Expected quarry probe input to report 60 RF/t, got "
+                        + quarry.getEnergyReceivedLastTick());
+                return;
+            }
+            context.succeed();
+        });
     }
 
     /**

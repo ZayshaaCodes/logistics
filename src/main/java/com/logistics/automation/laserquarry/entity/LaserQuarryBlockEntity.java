@@ -19,6 +19,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext;
+import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext.Result;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -68,7 +70,54 @@ public class LaserQuarryBlockEntity extends BaseBlockEntity implements PipeConne
             0,
             this::setChanged
     );
+    private final EnergyStorage energyStorage = new EnergyStorage() {
+        @Override
+        public boolean supportsExtraction() {
+            return energy.supportsExtraction();
+        }
+
+        @Override
+        public boolean supportsInsertion() {
+            return energy.supportsInsertion();
+        }
+
+        @Override
+        public long insert(long maxAmount, TransactionContext transaction) {
+            long inserted = energy.insert(maxAmount, transaction);
+            if (inserted <= 0) {
+                return 0;
+            }
+
+            if (transaction == null) {
+                energyReceivedThisTick += inserted;
+            } else {
+                transaction.addCloseCallback((context, result) -> {
+                    if (result == Result.COMMITTED) {
+                        energyReceivedThisTick += inserted;
+                    }
+                });
+            }
+            return inserted;
+        }
+
+        @Override
+        public long extract(long maxAmount, TransactionContext transaction) {
+            return energy.extract(maxAmount, transaction);
+        }
+
+        @Override
+        public long getAmount() {
+            return energy.getAmount();
+        }
+
+        @Override
+        public long getCapacity() {
+            return energy.getCapacity();
+        }
+    };
     private long lastSyncedEnergy = 0; // For client sync
+    private long energyReceivedLastTick = 0;
+    private long energyReceivedThisTick = 0;
     private boolean consumedEnergyThisTick = false; // For LED when buffer is low
 
     // Phase state
@@ -117,7 +166,7 @@ public class LaserQuarryBlockEntity extends BaseBlockEntity implements PipeConne
     @Override
     public EnergyStorage energyStorage(@Nullable Direction side) {
         // Quarry accepts energy from all sides
-        return energy;
+        return energyStorage;
     }
 
     public static void tick(Level world, BlockPos pos, BlockState state, LaserQuarryBlockEntity entity) {
@@ -126,6 +175,9 @@ public class LaserQuarryBlockEntity extends BaseBlockEntity implements PipeConne
         }
 
         registerActiveQuarry((ServerLevel) world, pos);
+
+        entity.energyReceivedLastTick = entity.energyReceivedThisTick;
+        entity.energyReceivedThisTick = 0;
 
         if (entity.finished) {
             return;
@@ -1086,6 +1138,26 @@ public class LaserQuarryBlockEntity extends BaseBlockEntity implements PipeConne
                 LogisticsConfig.get().quarry.armEnergy + (double) energy.amount / MOVE_COST_BUFFER_DIVISOR);
     }
 
+    private long getCurrentBufferDraw() {
+        if (finished) {
+            return 0;
+        }
+
+        return switch (currentPhase) {
+            case CLEARING -> currentBreakTime > breakProgress
+                    ? (long) Math.ceil(currentBreakTime - breakProgress)
+                    : 0;
+            case BUILDING_FRAME -> FRAME_BUILD_COST;
+            case MINING -> switch (armState) {
+                case MOVING -> getMoveCost();
+                case SETTLING -> 0;
+                case BREAKING -> currentBreakTime > breakProgress
+                        ? (long) Math.ceil(currentBreakTime - breakProgress)
+                        : 0;
+            };
+        };
+    }
+
     /**
      * Gets the effective arm speed based on energy consumption.
      * Formula: 0.1 + (energyUsed / 2000) blocks/tick
@@ -1105,7 +1177,11 @@ public class LaserQuarryBlockEntity extends BaseBlockEntity implements PipeConne
 
     @Override
     public long networkDemandPerTick() {
-        return finished ? 0 : getMoveCost();
+        return getCurrentBufferDraw();
+    }
+
+    public long getEnergyReceivedLastTick() {
+        return energyReceivedLastTick;
     }
 
     // ==================== Probe Support ====================
@@ -1142,8 +1218,8 @@ public class LaserQuarryBlockEntity extends BaseBlockEntity implements PipeConne
 
         // Power consumption and speed (only during active phases)
         if (!finished) {
-            long moveCost = getMoveCost();
-            builder.entry("Consumption", String.format("%,d RF/t", moveCost), ChatFormatting.GOLD);
+            builder.entry("Power In", String.format("%,d RF/t", energyReceivedLastTick), ChatFormatting.GREEN);
+            builder.entry("Buffer Draw", String.format("%,d RF/t", getCurrentBufferDraw()), ChatFormatting.GOLD);
 
             if (currentPhase == Phase.MINING) {
                 float speed = getEffectiveArmSpeed();

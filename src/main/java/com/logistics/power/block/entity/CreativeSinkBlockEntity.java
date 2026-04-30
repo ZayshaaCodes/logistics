@@ -8,6 +8,7 @@ import com.logistics.core.lib.power.EnergyDemandProvider;
 import com.logistics.core.lib.storage.NbtCompat;
 import com.logistics.core.lib.support.ProbeResult;
 import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext;
+import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext.Result;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -49,9 +50,14 @@ public class CreativeSinkBlockEntity extends BaseBlockEntity
             long canAccept = Math.max(0, getDrainRate() - energyThisTick);
             long toAccept = Math.min(maxAmount, canAccept);
             if (toAccept > 0) {
-                // Note: energyThisTick mutated outside transaction lifecycle is intentional.
-                // Counter resets every tick (Line ~65) and energy is discarded anyway.
                 energyThisTick += toAccept;
+                if (transaction != null) {
+                    transaction.addCloseCallback((context, result) -> {
+                        if (result == Result.ABORTED) {
+                            energyThisTick -= toAccept;
+                        }
+                    });
+                }
             }
             return toAccept;
         }

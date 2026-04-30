@@ -45,7 +45,7 @@ public class CableBlock extends BaseEntityBlock implements ProbeBehavior.Probeab
     public static final MapCodec<CableBlock> CODEC = simpleCodec(CableBlock::new);
     public static final BooleanProperty WATERLOGGED = BlockStateProperties.WATERLOGGED;
 
-    private static final double CABLE_SIZE = 6.0;
+    private static final double CABLE_SIZE = 4.0;
 
     private static final VoxelShape CORE_SHAPE = Block.box(
             8 - CABLE_SIZE / 2, 8 - CABLE_SIZE / 2, 8 - CABLE_SIZE / 2,
@@ -98,7 +98,7 @@ public class CableBlock extends BaseEntityBlock implements ProbeBehavior.Probeab
 
     @Override
     public RenderShape getRenderShape(BlockState state) {
-        return RenderShape.INVISIBLE;
+        return RenderShape.MODEL;
     }
 
     @Nullable @Override
@@ -231,7 +231,7 @@ public class CableBlock extends BaseEntityBlock implements ProbeBehavior.Probeab
 
         // Connect to anything with energy storage (engines, machines, pipes with energy)
         EnergyStorage storage = EnergyStorage.SIDED.find(level, neighborPos, direction.getOpposite());
-        if (storage != null) {
+        if (storage != null && (storage.supportsInsertion() || storage.supportsExtraction())) {
             return ConnectionType.DEVICE;
         }
 
