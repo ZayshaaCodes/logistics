@@ -101,17 +101,19 @@ public class CableNetwork {
     private DeviceConnections collectDeviceConnections(Level level, @Nullable BlockPos excludedPos) {
         List<EnergyStorage> sources = new ArrayList<>();
         List<EnergyStorage> targets = new ArrayList<>();
-        Set<BlockPos> seenDevices = new HashSet<>();
+        Set<DeviceConnectionKey> seenConnections = new HashSet<>();
 
         for (BlockPos cablePos : cablePositions) {
             for (Direction dir : Direction.values()) {
                 BlockPos neighborPos = cablePos.relative(dir);
                 if (cablePositions.contains(neighborPos)) continue;
                 if (neighborPos.equals(excludedPos)) continue;
-                if (!seenDevices.add(neighborPos)) continue;
 
-                EnergyStorage storage = EnergyStorage.SIDED.find(level, neighborPos, dir.getOpposite());
+                Direction side = dir.getOpposite();
+                EnergyStorage storage = EnergyStorage.SIDED.find(level, neighborPos, side);
                 if (storage != null) {
+                    if (!seenConnections.add(new DeviceConnectionKey(neighborPos, side))) continue;
+
                     BlockEntity blockEntity = level.getBlockEntity(neighborPos);
                     if (storage.supportsInsertion()) {
                         targets.add(storage);
@@ -237,4 +239,6 @@ public class CableNetwork {
     }
 
     private record DeviceConnections(List<EnergyStorage> sources, List<EnergyStorage> targets) {}
+
+    private record DeviceConnectionKey(BlockPos pos, Direction side) {}
 }

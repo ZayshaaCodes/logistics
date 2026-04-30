@@ -94,7 +94,7 @@ public final class LogisticsPower extends LogisticsMod implements DomainBootstra
 
         private static Block registerCable(String name, CableTier tier, SoundType soundType) {
             return INSTANCE.registerBlockWithItem(name,
-                    props -> new CableBlock(props.strength(1.5f).sound(soundType).noOcclusion(), tier));
+                    props -> new CableBlock(props.strength(1.5f).sound(soundType).noOcclusion().dynamicShape(), tier));
         }
     }
 

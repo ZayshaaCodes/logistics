@@ -6,6 +6,7 @@ import com.logistics.core.macerator.MaceratorBlockEntity;
 import com.logistics.core.lib.power.AbstractEngineBlock;
 import com.logistics.power.cable.CableBlock;
 import com.logistics.power.cable.CableBlockEntity;
+import com.logistics.power.block.entity.CreativeSinkBlockEntity;
 import com.logistics.power.engine.block.entity.RedstoneEngineBlockEntity;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -93,6 +94,39 @@ public class CableGameTest {
             }
             context.succeed();
         });
+    }
+
+    @GameTest
+    public void testAbortedCableTransactionDoesNotReachCreativeSink(GameTestHelper context) {
+        BlockPos cablePos = new BlockPos(1, 1, 1);
+        BlockPos sinkPos = new BlockPos(2, 1, 1);
+
+        context.setBlock(cablePos, LogisticsPower.BLOCK.COPPER_CABLE);
+        context.setBlock(sinkPos, LogisticsPower.BLOCK.CREATIVE_SINK);
+
+        CableBlockEntity cable = context.getBlockEntity(cablePos, CableBlockEntity.class);
+        CreativeSinkBlockEntity sink = context.getBlockEntity(sinkPos, CreativeSinkBlockEntity.class);
+        if (cable == null || sink == null) {
+            context.fail("Expected cable and creative sink block entities");
+            return;
+        }
+
+        long demandBefore = sink.networkDemandPerTick();
+        try (Transaction transaction = Transaction.openOuter()) {
+            long inserted = cable.energyStorage(Direction.WEST).insert(demandBefore, transaction);
+            if (inserted != demandBefore) {
+                context.fail("Cable should reserve creative sink demand inside transaction, got: " + inserted);
+                return;
+            }
+        }
+
+        long demandAfterAbort = sink.networkDemandPerTick();
+        if (demandAfterAbort != demandBefore) {
+            context.fail("Aborted cable transaction should not count as sink input, got demand: " + demandAfterAbort);
+            return;
+        }
+
+        context.succeed();
     }
 
     @GameTest(maxTicks = 40)

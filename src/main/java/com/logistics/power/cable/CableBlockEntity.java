@@ -6,10 +6,14 @@ import com.logistics.core.lib.block.capability.HasEnergyStorage;
 import com.logistics.core.lib.power.AcceptsLowTierEnergy;
 import com.logistics.core.lib.power.EnergyDemandProvider;
 import com.logistics.core.lib.support.ProbeResult;
+import com.logistics.core.lib.storage.NbtCompat;
 import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -28,10 +32,13 @@ import team.reborn.energy.api.EnergyStorage;
 public class CableBlockEntity extends BaseBlockEntity
         implements HasEnergyStorage, AcceptsLowTierEnergy {
 
+    private static final String KEY_CONNECTIONS = "connections";
+
     private final CableBlock.ConnectionType[] connectionCache = new CableBlock.ConnectionType[6];
     private boolean connectionCacheDirty = true;
     private boolean registeredInNetwork = false;
     private int lastConnectionMask = -1;
+    private int renderConnectionMask = 0;
 
     public CableBlockEntity(BlockPos pos, BlockState state) {
         super(LogisticsPower.ENTITY.CABLE_BLOCK_ENTITY, pos, state);
@@ -71,6 +78,13 @@ public class CableBlockEntity extends BaseBlockEntity
         return connectionCache[direction.get3DDataValue()];
     }
 
+    public int getRenderConnectionMask() {
+        if (connectionCacheDirty && (level == null || !level.isClientSide())) {
+            rebuildConnectionCache();
+        }
+        return renderConnectionMask;
+    }
+
     private void rebuildConnectionCache() {
         if (level == null) return;
         if (!(getBlockState().getBlock() instanceof CableBlock cableBlock)) return;
@@ -78,6 +92,7 @@ public class CableBlockEntity extends BaseBlockEntity
         for (Direction dir : Direction.values()) {
             connectionCache[dir.get3DDataValue()] = cableBlock.getDynamicConnectionType(level, worldPosition, dir);
         }
+        renderConnectionMask = computeConnectionMask();
         connectionCacheDirty = false;
     }
 
@@ -99,9 +114,37 @@ public class CableBlockEntity extends BaseBlockEntity
         int mask = computeConnectionMask();
         if (mask != lastConnectionMask) {
             lastConnectionMask = mask;
+            renderConnectionMask = mask;
             if (level != null && !level.isClientSide()) {
                 markDirtyAndSync();
             }
+        }
+    }
+
+    private void applyConnectionMask(int mask) {
+        renderConnectionMask = mask;
+        lastConnectionMask = mask;
+        for (Direction dir : Direction.values()) {
+            int ordinal = (mask >> (dir.get3DDataValue() * 2)) & 0b11;
+            CableBlock.ConnectionType[] values = CableBlock.ConnectionType.values();
+            connectionCache[dir.get3DDataValue()] = ordinal < values.length
+                    ? values[ordinal]
+                    : CableBlock.ConnectionType.NONE;
+        }
+        connectionCacheDirty = false;
+    }
+
+    @Override
+    protected void saveLogisticsData(CompoundTag tag, HolderLookup.Provider registries) {
+        tag.putInt(KEY_CONNECTIONS, renderConnectionMask);
+    }
+
+    @Override
+    protected void loadLogisticsData(CompoundTag tag, HolderLookup.Provider registries) {
+        applyConnectionMask(NbtCompat.getInt(tag, KEY_CONNECTIONS, 0));
+        if (level != null && level.isClientSide()) {
+            BlockState state = getBlockState();
+            level.sendBlockUpdated(worldPosition, state, state, Block.UPDATE_ALL);
         }
     }
 

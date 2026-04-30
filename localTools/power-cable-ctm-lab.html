@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Power Cable CTM Lab</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #15171a;
+      --panel: #20242a;
+      --panel-2: #292f37;
+      --line: #3a424d;
+      --text: #eef2f6;
+      --muted: #aab3bd;
+      --accent: #f1b74a;
+      --accent-2: #6cc4a1;
+      --danger: #df716b;
+      --shadow: rgba(0, 0, 0, 0.26);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(320px, 520px) minmax(380px, 1fr);
+      gap: 18px;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 18px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 12px 36px var(--shadow);
+      min-width: 0;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1, h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .content { padding: 16px; }
+
+    .stack { display: grid; gap: 14px; }
+
+    .face-buttons,
+    .world-buttons,
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    button,
+    input[type="number"] {
+      font: inherit;
+      color: var(--text);
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    button {
+      min-height: 36px;
+      padding: 0 12px;
+      cursor: pointer;
+    }
+
+    button:hover { border-color: var(--accent); }
+
+    button.active {
+      background: #4b3920;
+      border-color: var(--accent);
+      color: #fff5da;
+    }
+
+    button.connected {
+      background: #21483b;
+      border-color: var(--accent-2);
+    }
+
+    button.hidden-face {
+      background: #4d2425;
+      border-color: var(--danger);
+    }
+
+    .muted { color: var(--muted); }
+
+    .view-grid {
+      display: grid;
+      grid-template-columns: 92px minmax(190px, 1fr) 92px;
+      grid-template-rows: 72px 190px 72px;
+      align-items: center;
+      justify-items: center;
+      gap: 8px;
+      padding: 10px;
+      background: #181b20;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .edge-button {
+      width: 100%;
+      height: 100%;
+      padding: 8px;
+      line-height: 1.15;
+      display: grid;
+      align-content: center;
+      justify-items: center;
+      gap: 4px;
+    }
+
+    .edge-button small,
+    .world-buttons small { color: var(--muted); }
+
+    .edge-top { grid-column: 2; grid-row: 1; }
+    .edge-right { grid-column: 3; grid-row: 2; }
+    .edge-bottom { grid-column: 2; grid-row: 3; }
+    .edge-left { grid-column: 1; grid-row: 2; }
+
+    .face-preview {
+      grid-column: 2;
+      grid-row: 2;
+      width: 180px;
+      height: 180px;
+      display: grid;
+      place-items: center;
+      background: #0f1115;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .face-preview.hidden {
+      border-color: var(--danger);
+    }
+
+    canvas {
+      image-rendering: pixelated;
+      max-width: 100%;
+    }
+
+    #faceCanvas {
+      width: 160px;
+      height: 160px;
+      border: 1px solid #59616b;
+    }
+
+    .atlas-row {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    #atlasCanvas {
+      width: 128px;
+      height: 128px;
+      border: 1px solid var(--line);
+      background: #101216;
+    }
+
+    .tile-table {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(56px, 1fr));
+      gap: 8px;
+    }
+
+    .tile-cell {
+      display: grid;
+      gap: 4px;
+      padding: 8px;
+      background: #181b20;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    .tile-cell.active { border-color: var(--accent); background: #322616; }
+
+    .tile-cell label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      min-height: 32px;
+      padding: 0 8px;
+    }
+
+    .facts {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .fact {
+      background: #181b20;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      min-width: 0;
+    }
+
+    .fact span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+
+    .fact strong {
+      font-size: 14px;
+      word-break: break-word;
+    }
+
+    pre {
+      margin: 0;
+      overflow: auto;
+      white-space: pre-wrap;
+      background: #101216;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 12px;
+      color: #d9e2eb;
+      font-size: 13px;
+    }
+
+    @media (max-width: 880px) {
+      main { grid-template-columns: 1fr; padding: 12px; }
+      .atlas-row { grid-template-columns: 1fr; }
+      .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="panel">
+      <div class="panel-header">
+        <h1>Power Cable CTM Lab</h1>
+        <span class="muted" id="textureStatus">texture loading</span>
+      </div>
+      <div class="content stack">
+        <div>
+          <h2>Viewing Face</h2>
+          <div class="face-buttons" id="faceButtons"></div>
+        </div>
+
+        <div class="view-grid">
+          <button class="edge-button edge-top" id="edge0"></button>
+          <button class="edge-button edge-right" id="edge1"></button>
+          <button class="edge-button edge-bottom" id="edge2"></button>
+          <button class="edge-button edge-left" id="edge3"></button>
+          <div class="face-preview" id="facePreview">
+            <canvas id="faceCanvas" width="16" height="16"></canvas>
+          </div>
+        </div>
+
+        <div>
+          <h2>World Arms</h2>
+          <div class="world-buttons" id="worldButtons"></div>
+        </div>
+
+        <div class="facts">
+          <div class="fact"><span>connection mask</span><strong id="connectionMaskText"></strong></div>
+          <div class="fact"><span>edge mask</span><strong id="edgeMaskText"></strong></div>
+          <div class="fact"><span>tile index</span><strong id="tileText"></strong></div>
+          <div class="fact"><span>visible face</span><strong id="visibleText"></strong></div>
+          <div class="fact"><span>single-arm nub</span><strong id="nubText"></strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Tile Lookup</h2>
+        <div class="actions">
+          <button id="resetLookup">Reset</button>
+          <button id="copyLookup">Copy Java</button>
+        </div>
+      </div>
+      <div class="content stack">
+        <div class="atlas-row">
+          <canvas id="atlasCanvas" width="16" height="16"></canvas>
+          <div class="tile-table" id="tileTable"></div>
+        </div>
+        <pre id="javaOutput"></pre>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const directions = ["DOWN", "UP", "NORTH", "SOUTH", "WEST", "EAST"];
+    const directionBits = Object.fromEntries(directions.map((name, index) => [name, 1 << index]));
+    const opposite = {
+      DOWN: "UP",
+      UP: "DOWN",
+      NORTH: "SOUTH",
+      SOUTH: "NORTH",
+      WEST: "EAST",
+      EAST: "WEST"
+    };
+
+    // For each visible core face, only these four perpendicular world directions matter.
+    // Order is the 2D UV edge order used for the 4-bit mask: top, right, bottom, left.
+    const faceEdges = {
+      DOWN:  ["SOUTH", "EAST",  "NORTH", "WEST"],
+      UP:    ["NORTH", "EAST",  "SOUTH", "WEST"],
+      NORTH: ["UP",    "WEST",  "DOWN",  "EAST"],
+      SOUTH: ["UP",    "EAST",  "DOWN",  "WEST"],
+      WEST:  ["UP",    "SOUTH", "DOWN",  "NORTH"],
+      EAST:  ["UP",    "NORTH", "DOWN",  "SOUTH"]
+    };
+
+    const edgeNames = ["top", "right", "bottom", "left"];
+    const hiddenCoreTile = 15; 
+    const defaultLookup = [
+      3, 11, 12, 8,
+      11, 11, 0, 4,
+      13, 10, 12, 9,
+      2, 6, 1, 5
+    ];
+
+    let selectedFace = "UP";
+    let connectionMask = 0;
+    let tileLookup = defaultLookup.slice();
+
+    const texture = new Image();
+    texture.src = "../src/main/resources/assets/logistics/textures/block/power/copper_cable.png";
+    texture.onload = () => {
+      document.getElementById("textureStatus").textContent = `${texture.naturalWidth}x${texture.naturalHeight}`;
+      render();
+    };
+    texture.onerror = () => {
+      document.getElementById("textureStatus").textContent = "texture unavailable";
+      render();
+    };
+
+    const faceButtons = document.getElementById("faceButtons");
+    const worldButtons = document.getElementById("worldButtons");
+    const tileTable = document.getElementById("tileTable");
+
+    for (const face of directions) {
+      const button = document.createElement("button");
+      button.textContent = face;
+      button.addEventListener("click", () => {
+        selectedFace = face;
+        render();
+      });
+      faceButtons.appendChild(button);
+    }
+
+    for (const dir of directions) {
+      const button = document.createElement("button");
+      button.dataset.direction = dir;
+      button.addEventListener("click", () => {
+        connectionMask ^= directionBits[dir];
+        render();
+      });
+      worldButtons.appendChild(button);
+    }
+
+    for (let mask = 0; mask < 16; mask++) {
+      const cell = document.createElement("div");
+      cell.className = "tile-cell";
+      const label = document.createElement("label");
+      label.textContent = `mask ${mask.toString(2).padStart(4, "0")}`;
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = "0";
+      input.max = "15";
+      input.value = tileLookup[mask];
+      input.addEventListener("input", () => {
+        tileLookup[mask] = clampTile(input.value);
+        input.value = tileLookup[mask];
+        render();
+      });
+      cell.append(label, input);
+      tileTable.appendChild(cell);
+    }
+
+    document.getElementById("resetLookup").addEventListener("click", () => {
+      tileLookup = defaultLookup.slice();
+      render();
+    });
+
+    document.getElementById("copyLookup").addEventListener("click", async () => {
+      const text = javaLookup();
+      await navigator.clipboard.writeText(text);
+      document.getElementById("copyLookup").textContent = "Copied";
+      setTimeout(() => document.getElementById("copyLookup").textContent = "Copy Java", 900);
+    });
+
+    for (let i = 0; i < 4; i++) {
+      document.getElementById(`edge${i}`).addEventListener("click", () => {
+        const dir = faceEdges[selectedFace][i];
+        connectionMask ^= directionBits[dir];
+        render();
+      });
+    }
+
+    function clampTile(value) {
+      const number = Number.parseInt(value, 10);
+      if (!Number.isFinite(number)) return 0;
+      return Math.max(0, Math.min(15, number));
+    }
+
+    function isConnected(dir) {
+      return (connectionMask & directionBits[dir]) !== 0;
+    }
+
+    function edgeMaskForFace(face) {
+      const edges = faceEdges[face];
+      let result = 0;
+      for (let i = 0; i < edges.length; i++) {
+        if (isConnected(edges[i])) result |= 1 << i;
+      }
+      return result;
+    }
+
+    function singleArmDirection() {
+      const connected = directions.filter(isConnected);
+      return connected.length === 1 ? connected[0] : null;
+    }
+
+    function render() {
+      const edgeMask = edgeMaskForFace(selectedFace);
+      const faceHidden = isConnected(selectedFace);
+      const tile = faceHidden ? hiddenCoreTile : tileLookup[edgeMask];
+      const armDir = singleArmDirection();
+      const nubDir = armDir ? opposite[armDir] : null;
+
+      [...faceButtons.children].forEach(button => {
+        button.classList.toggle("active", button.textContent === selectedFace);
+        button.classList.toggle("hidden-face", button.textContent === selectedFace && faceHidden);
+      });
+
+      [...worldButtons.children].forEach(button => {
+        const dir = button.dataset.direction;
+        button.classList.toggle("connected", isConnected(dir));
+        const state = isConnected(dir) ? "on" : "off";
+        const nub = dir === nubDir ? " + nub" : "";
+        button.innerHTML = `${dir}<br><small>${state}${nub}</small>`;
+      });
+
+      faceEdges[selectedFace].forEach((dir, index) => {
+        const button = document.getElementById(`edge${index}`);
+        button.classList.toggle("connected", isConnected(dir));
+        button.innerHTML = `${edgeNames[index]}<br><small>${dir}</small>`;
+      });
+
+      [...tileTable.children].forEach((cell, index) => {
+        cell.classList.toggle("active", !faceHidden && index === edgeMask);
+        cell.querySelector("input").value = tileLookup[index];
+      });
+
+      document.getElementById("facePreview").classList.toggle("hidden", faceHidden);
+      document.getElementById("connectionMaskText").textContent = `${connectionMask} / ${connectionMask.toString(2).padStart(6, "0")}`;
+      document.getElementById("edgeMaskText").textContent = `${edgeMask} / ${edgeMask.toString(2).padStart(4, "0")}`;
+      document.getElementById("tileText").textContent = `${tile} (x ${tile % 4}, y ${Math.floor(tile / 4)})`;
+      document.getElementById("visibleText").textContent = faceHidden ? "hidden by front arm" : selectedFace;
+      document.getElementById("nubText").textContent = nubDir ? `${nubDir} (opposite ${armDir})` : "none";
+      document.getElementById("javaOutput").textContent = javaLookup();
+
+      drawTile("faceCanvas", tile, 16);
+      drawAtlas(edgeMask, tile);
+    }
+
+    function drawTile(canvasId, tile, size) {
+      const canvas = document.getElementById(canvasId);
+      const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (texture.complete && texture.naturalWidth) {
+        const sx = (tile % 4) * 4;
+        const sy = Math.floor(tile / 4) * 4;
+        ctx.drawImage(texture, sx, sy, 4, 4, 0, 0, size, size);
+      } else {
+        ctx.fillStyle = "#46351d";
+        ctx.fillRect(0, 0, size, size);
+        ctx.strokeStyle = "#f1b74a";
+        ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+      }
+    }
+
+    function drawAtlas(edgeMask, tile) {
+      const canvas = document.getElementById("atlasCanvas");
+      const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, 16, 16);
+      if (texture.complete && texture.naturalWidth) {
+        ctx.drawImage(texture, 0, 0, 16, 16);
+      } else {
+        ctx.fillStyle = "#181b20";
+        ctx.fillRect(0, 0, 16, 16);
+      }
+      ctx.lineWidth = 0.25;
+      ctx.strokeStyle = "rgba(255,255,255,0.35)";
+      for (let i = 1; i < 4; i++) {
+        ctx.beginPath(); ctx.moveTo(i * 4, 0); ctx.lineTo(i * 4, 16); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i * 4); ctx.lineTo(16, i * 4); ctx.stroke();
+      }
+      const x = (tile % 4) * 4;
+      const y = Math.floor(tile / 4) * 4;
+      ctx.strokeStyle = "#f1b74a";
+      ctx.lineWidth = 0.45;
+      ctx.strokeRect(x + 0.25, y + 0.25, 3.5, 3.5);
+      ctx.fillStyle = "rgba(241,183,74,0.22)";
+      ctx.fillRect(x, y, 4, 4);
+    }
+
+    function javaLookup() {
+      const rows = [];
+      for (let i = 0; i < 16; i += 4) {
+        rows.push("            " + tileLookup.slice(i, i + 4).map(n => String(n).padStart(2, " ")).join(", "));
+      }
+      return "private static final int[] TILE_FOR_EDGE_MASK = {\n" + rows.join(",\n") + "\n};";
+    }
+
+    render();
+  </script>
+</body>
+</html>

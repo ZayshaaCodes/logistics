@@ -1,7 +1,0 @@
-{
-  "parent": "logistics:block/power/cable_topology_nes",
-  "textures": {
-    "0": "logistics:block/power/ender_cable",
-    "particle": "logistics:block/power/ender_cable"
-  }
-}
